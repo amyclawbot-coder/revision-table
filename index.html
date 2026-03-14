@@ -394,15 +394,53 @@ async function downloadDocx() {
     tableHeader: true,
   });
 
+  // Build styled TextRuns for old/new columns with diff highlighting
+  function buildDiffRuns(oldText, newText) {
+    if (oldText === '（新增）' || oldText === '（刪除）' || newText === '（新增）' || newText === '（刪除）') {
+      return {
+        oldRuns: [new TextRun({ ...cellTextStyle, text: oldText })],
+        newRuns: [new TextRun({ ...cellTextStyle, text: newText })]
+      };
+    }
+    const diffs = Diff.diffWords(oldText, newText);
+    const oldRuns = [];
+    const newRuns = [];
+    diffs.forEach(part => {
+      if (part.removed) {
+        // 修正前：刪除的部分 → 紅色 + 刪除線
+        oldRuns.push(new TextRun({
+          ...cellTextStyle,
+          text: part.value,
+          color: "FF0000",
+          strike: true,
+        }));
+      } else if (part.added) {
+        // 修正後：新增的部分 → 藍色 + 底線
+        newRuns.push(new TextRun({
+          ...cellTextStyle,
+          text: part.value,
+          color: "0000FF",
+          underline: { type: docx.UnderlineType.SINGLE },
+        }));
+      } else {
+        // 未變更的部分
+        oldRuns.push(new TextRun({ ...cellTextStyle, text: part.value }));
+        newRuns.push(new TextRun({ ...cellTextStyle, text: part.value }));
+      }
+    });
+    return { oldRuns, newRuns };
+  }
+
   const dataRows = diffResults.map((p, idx) => {
+    const { oldRuns, newRuns } = buildDiffRuns(p.old, p.new);
     return new TableRow({
       children: [
         new TableCell({ borders, width: { size: 600, type: WidthType.DXA },
           children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ ...cellTextStyle, text: String(idx + 1) })] })] }),
         new TableCell({ borders, width: { size: 3500, type: WidthType.DXA },
-          children: [new Paragraph({ children: [new TextRun({ ...cellTextStyle, text: p.old })] })] }),
+          children: [new Paragraph({ children: oldRuns })] }),
         new TableCell({ borders, width: { size: 3500, type: WidthType.DXA },
-          children: [new Paragraph({ children: [new TextRun({ ...cellTextStyle, text: p.new })] })] }),
+          children: [new Paragraph({ children: newRuns })] }),
         new TableCell({ borders, width: { size: 2400, type: WidthType.DXA },
           children: [new Paragraph({ children: [new TextRun({ ...cellTextStyle, text: reasons[idx] || '' })] })] }),
       ],
