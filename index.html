@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>修正對照表產生器</title>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@9.5.0/build/index.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/diff@7.0.0/dist/diff.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", sans-serif;
+  background: #f0f2f5;
+  min-height: 100vh;
+  color: #1a1a2e;
+}
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+h1 {
+  text-align: center;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #1a1a2e;
+}
+.subtitle {
+  text-align: center;
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 32px;
+}
+.upload-section {
+  display: grid;
+  grid-template-columns: 1fr 60px 1fr;
+  gap: 0;
+  align-items: center;
+  margin-bottom: 24px;
+}
+.upload-box {
+  border: 2px dashed #ccc;
+  border-radius: 12px;
+  padding: 40px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: #fff;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.upload-box:hover { border-color: #4a90d9; background: #f8faff; }
+.upload-box.has-file { border-color: #52c41a; border-style: solid; background: #f6ffed; }
+.upload-box .icon { font-size: 48px; margin-bottom: 12px; }
+.upload-box .label { font-size: 16px; font-weight: 600; color: #333; margin-bottom: 4px; }
+.upload-box .hint { font-size: 13px; color: #999; }
+.upload-box .filename { font-size: 14px; color: #52c41a; font-weight: 600; margin-top: 8px; word-break: break-all; }
+.arrow-center { text-align: center; font-size: 32px; color: #999; }
+.actions {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.btn {
+  padding: 14px 48px;
+  font-size: 18px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.btn-primary {
+  background: #1a73e8;
+  color: #fff;
+}
+.btn-primary:hover { background: #1557b0; }
+.btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+.btn-download {
+  background: #52c41a;
+  color: #fff;
+  margin-left: 12px;
+}
+.btn-download:hover { background: #3da50f; }
+.status {
+  text-align: center;
+  margin: 16px 0;
+  font-size: 15px;
+  color: #666;
+  min-height: 24px;
+}
+.status.error { color: #e74c3c; }
+.preview-section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  display: none;
+}
+.preview-section h2 {
+  font-size: 20px;
+  margin-bottom: 16px;
+  color: #1a1a2e;
+}
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.preview-table th {
+  background: #1a3c6e;
+  color: #fff;
+  padding: 12px 16px;
+  text-align: center;
+  font-weight: 600;
+}
+.preview-table td {
+  border: 1px solid #d9d9d9;
+  padding: 12px 16px;
+  vertical-align: top;
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+.preview-table tr:nth-child(even) td { background: #fafafa; }
+.preview-table .col-num { width: 50px; text-align: center; }
+.preview-table .col-before { width: 35%; }
+.preview-table .col-after { width: 35%; }
+.preview-table .col-reason { width: calc(30% - 50px); }
+del.diff-del { background: #fdd; text-decoration: line-through; color: #c0392b; }
+ins.diff-ins { background: #dfd; text-decoration: none; color: #27ae60; font-weight: 600; }
+.footer {
+  text-align: center;
+  margin-top: 40px;
+  color: #aaa;
+  font-size: 12px;
+}
+.privacy-note {
+  text-align: center;
+  background: #e8f5e9;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: #2e7d32;
+}
+@media (max-width: 768px) {
+  .upload-section { grid-template-columns: 1fr; gap: 12px; }
+  .arrow-center { transform: rotate(90deg); }
+  .btn { padding: 12px 32px; font-size: 16px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📄 修正對照表產生器</h1>
+  <p class="subtitle">上傳新舊版 Word 檔，自動產生修正對照表</p>
+  <div class="privacy-note">🔒 所有檔案僅在你的瀏覽器內處理，不會上傳到任何伺服器</div>
+
+  <div class="upload-section">
+    <div class="upload-box" id="oldBox" onclick="document.getElementById('oldFile').click()">
+      <div class="icon">📁</div>
+      <div class="label">舊版文件</div>
+      <div class="hint">點擊或拖放 .docx 檔案</div>
+      <div class="filename" id="oldFileName"></div>
+      <input type="file" id="oldFile" accept=".docx" hidden>
+    </div>
+    <div class="arrow-center">→</div>
+    <div class="upload-box" id="newBox" onclick="document.getElementById('newFile').click()">
+      <div class="icon">📁</div>
+      <div class="label">新版文件</div>
+      <div class="hint">點擊或拖放 .docx 檔案</div>
+      <div class="filename" id="newFileName"></div>
+      <input type="file" id="newFile" accept=".docx" hidden>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" id="compareBtn" disabled onclick="compare()">比對並產生對照表</button>
+    <button class="btn btn-download" id="downloadBtn" style="display:none" onclick="downloadDocx()">⬇ 下載 .docx</button>
+  </div>
+  <div class="status" id="status"></div>
+
+  <div class="preview-section" id="preview">
+    <h2>修正對照表預覽</h2>
+    <table class="preview-table">
+      <thead>
+        <tr>
+          <th class="col-num">項次</th>
+          <th class="col-before">修正前</th>
+          <th class="col-after">修正後</th>
+          <th class="col-reason">修正原因說明</th>
+        </tr>
+      </thead>
+      <tbody id="previewBody"></tbody>
+    </table>
+  </div>
+
+  <div class="footer">修正對照表產生器 — 前端版 · 檔案不離開您的電腦</div>
+</div>
+
+<script>
+// --- File upload handling ---
+const oldFileInput = document.getElementById('oldFile');
+const newFileInput = document.getElementById('newFile');
+let oldArrayBuf = null, newArrayBuf = null;
+let diffResults = [];
+
+function setupDrop(boxId, inputId, isOld) {
+  const box = document.getElementById(boxId);
+  const input = document.getElementById(inputId);
+  ['dragenter','dragover'].forEach(e => box.addEventListener(e, ev => { ev.preventDefault(); box.style.borderColor = '#4a90d9'; }));
+  ['dragleave','drop'].forEach(e => box.addEventListener(e, ev => { ev.preventDefault(); box.style.borderColor = ''; }));
+  box.addEventListener('drop', ev => {
+    const file = ev.dataTransfer.files[0];
+    if (file) handleFile(file, isOld);
+  });
+  input.addEventListener('change', () => {
+    if (input.files[0]) handleFile(input.files[0], isOld);
+  });
+}
+
+function handleFile(file, isOld) {
+  if (!file.name.endsWith('.docx')) {
+    setStatus('請上傳 .docx 格式的 Word 檔案', true);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (isOld) {
+      oldArrayBuf = reader.result;
+      document.getElementById('oldFileName').textContent = file.name;
+      document.getElementById('oldBox').classList.add('has-file');
+    } else {
+      newArrayBuf = reader.result;
+      document.getElementById('newFileName').textContent = file.name;
+      document.getElementById('newBox').classList.add('has-file');
+    }
+    document.getElementById('compareBtn').disabled = !(oldArrayBuf && newArrayBuf);
+    setStatus('');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+setupDrop('oldBox', 'oldFile', true);
+setupDrop('newBox', 'newFile', false);
+
+function setStatus(msg, isError) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status' + (isError ? ' error' : '');
+}
+
+// --- Extract text from docx ---
+async function extractParagraphs(arrayBuf) {
+  const result = await mammoth.extractRawText({ arrayBuffer: arrayBuf });
+  // Split into paragraphs, filter empty
+  return result.value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+}
+
+// --- Compare ---
+async function compare() {
+  setStatus('正在比對中...');
+  document.getElementById('compareBtn').disabled = true;
+  document.getElementById('downloadBtn').style.display = 'none';
+  document.getElementById('preview').style.display = 'none';
+
+  try {
+    const oldParas = await extractParagraphs(oldArrayBuf);
+    const newParas = await extractParagraphs(newArrayBuf);
+
+    // Use diff to find changed paragraphs
+    const changes = Diff.diffArrays(oldParas, newParas);
+    diffResults = [];
+    let i = 0;
+    const paired = [];
+
+    // Collect removed/added pairs
+    for (let ci = 0; ci < changes.length; ci++) {
+      const c = changes[ci];
+      if (!c.added && !c.removed) continue; // unchanged
+
+      if (c.removed) {
+        const next = changes[ci + 1];
+        if (next && next.added) {
+          // Pair removed with added
+          const maxLen = Math.max(c.value.length, next.value.length);
+          for (let k = 0; k < maxLen; k++) {
+            paired.push({
+              old: k < c.value.length ? c.value[k] : '',
+              new: k < next.value.length ? next.value[k] : ''
+            });
+          }
+          ci++; // skip the added block
+        } else {
+          // Only removed
+          c.value.forEach(v => paired.push({ old: v, new: '（刪除）' }));
+        }
+      } else if (c.added) {
+        // Only added (no preceding removed)
+        c.value.forEach(v => paired.push({ old: '（新增）', new: v }));
+      }
+    }
+
+    if (paired.length === 0) {
+      setStatus('兩份文件內容相同，無差異。');
+      document.getElementById('compareBtn').disabled = false;
+      return;
+    }
+
+    diffResults = paired;
+    renderPreview(paired);
+    document.getElementById('preview').style.display = 'block';
+    document.getElementById('downloadBtn').style.display = 'inline-block';
+    setStatus(`比對完成，共 ${paired.length} 處差異`);
+  } catch (e) {
+    setStatus('比對失敗：' + e.message, true);
+  }
+  document.getElementById('compareBtn').disabled = false;
+}
+
+function highlightDiff(oldText, newText) {
+  if (oldText === '（新增）' || oldText === '（刪除）' || newText === '（新增）' || newText === '（刪除）') {
+    return { oldHtml: escHtml(oldText), newHtml: escHtml(newText) };
+  }
+  const diff = Diff.diffWords(oldText, newText);
+  let oldHtml = '', newHtml = '';
+  diff.forEach(part => {
+    const text = escHtml(part.value);
+    if (part.removed) {
+      oldHtml += `<del class="diff-del">${text}</del>`;
+    } else if (part.added) {
+      newHtml += `<ins class="diff-ins">${text}</ins>`;
+    } else {
+      oldHtml += text;
+      newHtml += text;
+    }
+  });
+  return { oldHtml, newHtml };
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderPreview(pairs) {
+  const tbody = document.getElementById('previewBody');
+  tbody.innerHTML = '';
+  pairs.forEach((p, idx) => {
+    const { oldHtml, newHtml } = highlightDiff(p.old, p.new);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="col-num">${idx + 1}</td>
+      <td class="col-before">${oldHtml}</td>
+      <td class="col-after">${newHtml}</td>
+      <td class="col-reason"><input type="text" style="width:100%;border:1px solid #d9d9d9;border-radius:4px;padding:6px 8px;font-size:13px;" placeholder="請填寫修正原因" data-idx="${idx}"></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// --- Download docx ---
+async function downloadDocx() {
+  const { Document, Packer, Table, TableRow, TableCell, Paragraph, TextRun, WidthType,
+          AlignmentType, BorderStyle, HeadingLevel, ShadingType } = docx;
+
+  // Collect reasons from inputs
+  const reasons = [];
+  document.querySelectorAll('#previewBody input').forEach(input => {
+    reasons.push(input.value || '');
+  });
+
+  const headerShading = { type: ShadingType.SOLID, color: "1a3c6e" };
+  const headerTextStyle = { bold: true, color: "ffffff", size: 22, font: "Microsoft JhengHei" };
+  const cellTextStyle = { size: 21, font: "Microsoft JhengHei" };
+  const borderStyle = { style: BorderStyle.SINGLE, size: 1, color: "999999" };
+  const borders = { top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle };
+
+  // Header row
+  const headerRow = new TableRow({
+    children: [
+      new TableCell({ borders, shading: headerShading, width: { size: 600, type: WidthType.DXA },
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ ...headerTextStyle, text: "項次" })] })] }),
+      new TableCell({ borders, shading: headerShading, width: { size: 3500, type: WidthType.DXA },
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ ...headerTextStyle, text: "修正前" })] })] }),
+      new TableCell({ borders, shading: headerShading, width: { size: 3500, type: WidthType.DXA },
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ ...headerTextStyle, text: "修正後" })] })] }),
+      new TableCell({ borders, shading: headerShading, width: { size: 2400, type: WidthType.DXA },
+        children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ ...headerTextStyle, text: "修正原因說明" })] })] }),
+    ],
+    tableHeader: true,
+  });
+
+  const dataRows = diffResults.map((p, idx) => {
+    return new TableRow({
+      children: [
+        new TableCell({ borders, width: { size: 600, type: WidthType.DXA },
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ ...cellTextStyle, text: String(idx + 1) })] })] }),
+        new TableCell({ borders, width: { size: 3500, type: WidthType.DXA },
+          children: [new Paragraph({ children: [new TextRun({ ...cellTextStyle, text: p.old })] })] }),
+        new TableCell({ borders, width: { size: 3500, type: WidthType.DXA },
+          children: [new Paragraph({ children: [new TextRun({ ...cellTextStyle, text: p.new })] })] }),
+        new TableCell({ borders, width: { size: 2400, type: WidthType.DXA },
+          children: [new Paragraph({ children: [new TextRun({ ...cellTextStyle, text: reasons[idx] || '' })] })] }),
+      ],
+    });
+  });
+
+  const doc = new Document({
+    sections: [{
+      properties: { page: { margin: { top: 720, bottom: 720, left: 720, right: 720 } } },
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 300 },
+          children: [new TextRun({ text: "修正對照表", bold: true, size: 32, font: "Microsoft JhengHei" })],
+        }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [headerRow, ...dataRows],
+        }),
+      ],
+    }],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '修正對照表.docx';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
