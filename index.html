@@ -373,9 +373,9 @@ async function downloadDocx() {
     reasons.push(input.value || '');
   });
 
-  const headerShading = { type: ShadingType.SOLID, color: "1a3c6e" };
-  const headerTextStyle = { bold: true, color: "ffffff", size: 22, font: "Microsoft JhengHei" };
-  const cellTextStyle = { size: 21, font: "Microsoft JhengHei" };
+  const headerShading = { type: ShadingType.SOLID, color: "FFFFFF" };
+  const headerTextStyle = { bold: true, color: "000000", size: 28, font: "DFKai-SB" };
+  const cellTextStyle = { size: 24, font: "DFKai-SB" };
   const borderStyle = { style: BorderStyle.SINGLE, size: 1, color: "999999" };
   const borders = { top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle };
 
@@ -454,7 +454,7 @@ async function downloadDocx() {
         new Paragraph({
           alignment: AlignmentType.CENTER,
           spacing: { after: 300 },
-          children: [new TextRun({ text: "修正對照表", bold: true, size: 32, font: "Microsoft JhengHei" })],
+          children: [new TextRun({ text: "修正對照表", bold: true, size: 32, font: "DFKai-SB" })],
         }),
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
